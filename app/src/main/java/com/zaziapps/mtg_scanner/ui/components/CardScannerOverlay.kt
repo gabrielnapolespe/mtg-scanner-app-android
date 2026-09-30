@@ -10,11 +10,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.util.lerp
 import com.zaziapps.mtg_scanner.data.model.CardDetection
 import com.zaziapps.mtg_scanner.data.local.lang.getColorList
+import com.zaziapps.mtg_scanner.ui.themes.Gold
 
 /**
  * UI graphic overlay layer that draws animated, smoothed bounding boxes over tracked card items.
@@ -89,48 +91,75 @@ fun CardScannerOverlay(
             val bottomBoundary = (rect.right * heightScale) + yOffset
 
             if (rightBoundary > leftBoundary && bottomBoundary > topBoundary) {
-                drawRoundRect(
-                    color = getCardColor(card),
-                    topLeft = Offset(leftBoundary, topBoundary),
-                    size = Size(rightBoundary - leftBoundary, bottomBoundary - topBoundary),
-                    cornerRadius = CornerRadius(24f, 24f),
-                    style = Stroke(width = 6f)
-                )
+                val topLeftOffset = Offset(leftBoundary, topBoundary)
+                val rectSize = Size(rightBoundary - leftBoundary, bottomBoundary - topBoundary)
+
+                // Obtain colors list
+                val uiColors = getCardColors(card)
+
+                when {
+                    // If card has 2 colors, drawRoundRect is painted with brush
+                    uiColors.size == 2 -> {
+                        drawRoundRect(
+                            brush = Brush.horizontalGradient(
+                                0.0f to uiColors[0],
+                                0.5f to uiColors[0],
+                                0.5f to uiColors[1],
+                                1.0f to uiColors[1],
+                                startX = leftBoundary,
+                                endX = rightBoundary
+                            ),
+                            topLeft = topLeftOffset,
+                            size = rectSize,
+                            cornerRadius = CornerRadius(24f, 24f),
+                            style = Stroke(width = 6f)
+                        )
+                    }
+                    // If card has 1 colors or none, drawRoundRect is painted normally using card color
+                    uiColors.size <= 1 -> {
+                        drawRoundRect(
+                            color = uiColors.firstOrNull() ?: Color(0xFFE91E63), // If Card has none color, place loading color frame (Pink)
+                            topLeft = topLeftOffset,
+                            size = rectSize,
+                            cornerRadius = CornerRadius(24f, 24f),
+                            style = Stroke(width = 6f)
+                        )
+                    }
+                    // If card has 3 colors or more, drawRoundRect is painted normally with Gold (0xFFD4AF37)
+                    else -> {
+                        drawRoundRect(
+                            color = Gold,
+                            topLeft = topLeftOffset,
+                            size = rectSize,
+                            cornerRadius = CornerRadius(24f, 24f),
+                            style = Stroke(width = 6f)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * Resolves a unique layout outline stroke color based on the mechanical identity properties parsed out of the translation instance.
+ * Maps the profile color codes of the cards into a list of Compose Color tokens.
  *
  * @param card The individual card track snapshot configuration to inspect.
- * @return A Compose color model token matching the card's color profile traits.
+ * @return A list of Compose Color tokens representing the card's color profile.
  */
-private fun getCardColor(card: CardDetection): Color {
-    val colors = card.foundTranslation
+private fun getCardColors(card: CardDetection): List<Color> {
+    val colorCodes = card.foundTranslation
         ?.getColorList()
-        ?: emptyList()
+        ?: return emptyList()
 
-    return when {
-        // Default color profile token assigned to colorless components or unmapped query datasets.
-        colors.isEmpty() -> {
-            Color(0xFFE91E63)
-        }
-        // Custom palette flag indicating complex multi-color entities.
-        colors.size > 1 -> {
-            Color(0xFFFFD700)
-        }
-        else -> {
-            // Distribute distinct individual structural shading themes mapped to standard shorthand symbol codes.
-            when (colors.first()) {
-                "W" -> Color(0xFFFFF4D6)
-                "U" -> Color(0xFF42A5F5)
-                "B" -> Color(0xFF000000)
-                "R" -> Color(0xFFEF5350)
-                "G" -> Color(0xFF66BB6A)
-                else -> Color(0xFF828283)
-            }
+    return colorCodes.map { code ->
+        when (code) {
+            "W" -> Color(0xFFFFF4D6)
+            "U" -> Color(0xFF42A5F5)
+            "B" -> Color(0xFF000000)
+            "R" -> Color(0xFFEF5350)
+            "G" -> Color(0xFF66BB6A)
+            else -> Color(0xFF828283)
         }
     }
 }
