@@ -109,12 +109,12 @@ fun CameraView(
                 .fillMaxSize()
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.Center
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp),
+                    .padding(top = 16.dp, bottom = 24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onMenuClick) {
@@ -139,91 +139,93 @@ fun CameraView(
                 )
             }
 
-            // Adapt the viewfinder bounding container into a perfect square format layout.
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.95f)
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(18.dp))
-                    .border(
-                        width = 3.dp,
-                        color = Gold.copy(alpha = 0.8f),
-                        shape = RoundedCornerShape(18.dp)
-                    )
-                    .background(Black),
+                    .weight(1f)
+                    .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                if (hasCameraPermission) {
-                    CameraPreview(
-                        imageCapture = imageCapture,
-                        modifier = Modifier.fillMaxSize(),
-                        cardTextAnalyzer = cardTextAnalyzer,
-                        onCardDetectionChanged = { isDetected ->
-                            if (!isDetected) {
-                                detectedCardsRects = emptyList()
-                            }
-                        },
-                        onCardsGeometriesDetected = { geometryList ->
-                            if (geometryList.isEmpty()) {
-                                detectedCardsRects = emptyList()
-                            } else {
-                                // Inject previously resolved cached translations directly back into incoming camera target frames.
-                                geometryList.forEach { card ->
-                                    card.foundTranslation = localizedTranslations[card.id]
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(
+                            width = 3.dp,
+                            color = Gold.copy(alpha = 0.8f),
+                            shape = RoundedCornerShape(18.dp)
+                        )
+                        .background(Black),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (hasCameraPermission) {
+                        CameraPreview(
+                            imageCapture = imageCapture,
+                            modifier = Modifier.fillMaxSize(),
+                            cardTextAnalyzer = cardTextAnalyzer,
+                            onCardDetectionChanged = { isDetected ->
+                                if (!isDetected) {
+                                    detectedCardsRects = emptyList()
                                 }
-                                detectedCardsRects = geometryList
-                            }
-                        },
-                        onCardNameExtracted = { activeTracks ->
-                            coroutineScope.launch {
-                                showDialog = false
+                            },
+                            onCardsGeometriesDetected = { geometryList ->
+                                if (geometryList.isEmpty()) {
+                                    detectedCardsRects = emptyList()
+                                } else {
+                                    // Inject previously resolved cached translations directly back into incoming camera target frames.
+                                    geometryList.forEach { card ->
+                                        card.foundTranslation = localizedTranslations[card.id]
+                                    }
+                                    detectedCardsRects = geometryList
+                                }
+                            },
+                            onCardNameExtracted = { activeTracks ->
+                                coroutineScope.launch {
+                                    showDialog = false
+                                    try {
+                                        activeTracks.forEach { card ->
+                                            // Intercept analysis runs early if a localized validation already populates screen buffers.
+                                            if (card.foundTranslation != null || localizedTranslations.containsKey(card.id)) {
+                                                return@forEach
+                                            }
+                                            val bitmap = card.bitmap
+                                            if (bitmap != null) {
+                                                launch {
+                                                    val detectedText = cardTextAnalyzer.firstRelevantTextExtraction(bitmap)
+                                                    val matchResults = scryfallViewModel.searchCard(detectedText)
+                                                    if (matchResults.isNotEmpty()) {
+                                                        val translation = matchResults[0]
+                                                        Log.d("TEXT_SCANNER", "Resolved matching catalog entry: ${translation.nameEs}")
 
-                                try {
-                                    activeTracks.forEach { card ->
-                                        // Intercept analysis runs early if a localized validation already populates screen buffers.
-                                        if (card.foundTranslation != null || localizedTranslations.containsKey(card.id)) {
-                                            return@forEach
-                                        }
-
-                                        val bitmap = card.bitmap
-                                        if (bitmap != null) {
-                                            launch {
-                                                val detectedText = cardTextAnalyzer.firstRelevantTextExtraction(bitmap)
-                                                val matchResults = scryfallViewModel.searchCard(detectedText)
-
-                                                if (matchResults.isNotEmpty()) {
-                                                    val translation = matchResults[0]
-                                                    Log.d("TEXT_SCANNER", "Resolved matching catalog entry: ${translation.nameEs}")
-
-                                                    // Persist resolved data structures back inside screens states to inform layout painters.
-                                                    localizedTranslations[card.id] = translation
-                                                    card.foundTranslation = translation
+                                                        // Persist resolved data structures back inside screens states to inform layout painters.
+                                                        localizedTranslations[card.id] = translation
+                                                        card.foundTranslation = translation
+                                                    }
                                                 }
                                             }
                                         }
+                                    } catch (e: Exception) {
+                                        Log.e("CameraView", "OCR/Scryfall Error", e)
                                     }
-                                } catch (e: Exception) {
-                                    Log.e("CameraView", "OCR/Scryfall Error", e)
                                 }
                             }
-                        }
-                    )
+                        )
 
-                    CardScannerOverlay(
-                        boundingBoxes = detectedCardsRects,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                        CardScannerOverlay(
+                            boundingBoxes = detectedCardsRects,
+                            modifier = Modifier.fillMaxSize()
+                        )
 
-                } else {
-                    Text(
-                        text = stringResource(id = R.string.required_access_camera_message),
-                        color = Black,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
+                    } else {
+                        Text(
+                            text = stringResource(id = R.string.required_access_camera_message),
+                            color = Black,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
-
         }
     }
     LoadingDialog(isLoading = isSearchingCard)
