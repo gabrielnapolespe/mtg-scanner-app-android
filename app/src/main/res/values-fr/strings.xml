@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">MTG-Scanner</string>
+    <string name="camera_view_title">Numérisez votre lettre</string>
+    <string name="spanish_label">Espagnol</string>
+    <string name="french_label">Français</string>
+    <string name="german_label">Allemand</string>
+    <string name="italian_label">Italien</string>
+    <string name="english_label">Anglais</string>
+    <string name="photo_button_text">Capturer</string>
+    <string name="scan_button_text">Scanner</string>
+    <string name="discard_button_text">Écarter</string>
+    <string name="required_access_camera_message">Accès à la caméra requis</string>
+    <string name="invert_lang_text">Inverser les langues</string>
+    <string name="error_scan_message">Erreur lors de la capture du texte de la carte</string>
+    <string name="close_button_text">Schließen</string>
+    <string name="image_preview_alt_text">Image capturée</string>
+    <string name="card_ilustration_alt_text">Illustration de carte</string>
+    <string name="card_preview_alt_text">Aperçu de la carte capturée</string>
+    <string name="scan_new_card_button_text">Scanner une nouvelle carte</string>
+    <string name="error_download_art_text">Erreur lors du téléchargement de l\'illustration</string>
+    <string name="collection_text">Collection</string>
+    <string name="see_collection_button_text">Voir la collection</string>
+    <string name="card_details_nav_title">Détails de la carte</string>
+    <string name="card_history_nav_title">Historique des cartes</string>
+    <string name="scanned_on_text">Numérisé le</string>
+    <string name="open_menu_icon_content_desc">Ouvrir le menu</string>
+    <string name="sort_cards_icon_content_desc">Cartes de tri</string>
+    <string name="newest_first_dropdown_option">Les plus récents en premier</string>
+    <string name="oldest_first_dropdown_option">Les plus anciens en premier</string>
+    <string name="by_name_dropdown_option">Par nom (A-Z)</string>
+    <string name="no_scanned_card_history_text">Vous n\'avez encore numérisé aucune carte</string>
+</resources>

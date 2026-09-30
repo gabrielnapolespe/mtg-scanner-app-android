@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">MTG-Scanner</string>
+    <string name="camera_view_title">Escanea tu carta</string>
+    <string name="spanish_label">Español</string>
+    <string name="french_label">Francés</string>
+    <string name="german_label">Alemán</string>
+    <string name="italian_label">Italiano</string>
+    <string name="english_label">Ingles</string>
+    <string name="photo_button_text">Capturar</string>
+    <string name="scan_button_text">Escanear</string>
+    <string name="discard_button_text">Descartar</string>
+    <string name="required_access_camera_message">Se requiere acceso a la cámara</string>
+    <string name="invert_lang_text">Invertir idiomas</string>
+    <string name="error_scan_message">Error al capturar el texto de la tarjeta</string>
+    <string name="close_button_text">Cerrar</string>
+    <string name="image_preview_alt_text">Foto capturada</string>
+    <string name="card_ilustration_alt_text">Ilustración de la carta</string>
+    <string name="card_preview_alt_text">Vista previa de la tarjeta capturada</string>
+    <string name="scan_new_card_button_text">Escanear nueva tarjeta</string>
+    <string name="error_download_art_text">Error al descargar la imagen</string>
+    <string name="collection_text">Colección</string>
+    <string name="see_collection_button_text">See Collection</string>
+    <string name="card_details_nav_title">Detalles de la carta</string>
+    <string name="card_history_nav_title">Historial de cartas</string>
+    <string name="scanned_on_text">Escaneado el</string>
+    <string name="open_menu_icon_content_desc">Abrir menu</string>
+    <string name="sort_cards_icon_content_desc">Ordenar cartas</string>
+    <string name="newest_first_dropdown_option">Más recientes primero</string>
+    <string name="oldest_first_dropdown_option">Más antiguos primero</string>
+    <string name="by_name_dropdown_option">Por nombre (A-Z)</string>
+    <string name="no_scanned_card_history_text">Aún no has escaneado ninguna carta</string>
+</resources>

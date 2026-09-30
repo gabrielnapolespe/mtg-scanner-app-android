@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">MTG-Scanner</string>
+    <string name="camera_view_title">Scannen Sie Ihre Karte</string>
+    <string name="spanish_label">Spanisch</string>
+    <string name="french_label">Französisch</string>
+    <string name="german_label">Deutsch</string>
+    <string name="italian_label">Italienisch</string>
+    <string name="english_label">Englisch</string>
+    <string name="photo_button_text">Erfassen</string>
+    <string name="scan_button_text">Scan</string>
+    <string name="discard_button_text">Verwerfen</string>
+    <string name="required_access_camera_message">Kamerazugriff erforderlich</string>
+    <string name="invert_lang_text">Sprachen umkehren</string>
+    <string name="error_scan_message">Fehler beim Erfassen des Kartentextes</string>
+    <string name="close_button_text">Fermer</string>
+    <string name="image_preview_alt_text">Aufgenommenes Bild</string>
+    <string name="card_ilustration_alt_text">Illustration für das Kartendesign</string>
+    <string name="card_preview_alt_text">Vorschau der erfassten Karte</string>
+    <string name="scan_new_card_button_text">Neue Karte scannen</string>
+    <string name="error_download_art_text">Fehler beim Herunterladen des Bildmaterials</string>
+    <string name="collection_text">Sammlung</string>
+    <string name="see_collection_button_text">Kollektion ansehen</string>
+    <string name="card_details_nav_title">Detajet e kartës</string>
+    <string name="card_history_nav_title">Kartenhistorie</string>
+    <string name="scanned_on_text">Gescannt am</string>
+    <string name="open_menu_icon_content_desc">Menü öffnen</string>
+    <string name="sort_cards_icon_content_desc">Karten sortieren</string>
+    <string name="newest_first_dropdown_option">Das Neueste zuerst</string>
+    <string name="oldest_first_dropdown_option">Die ältesten zuerst</string>
+    <string name="by_name_dropdown_option">Nach Name (A-Z)</string>
+    <string name="no_scanned_card_history_text">Du hast noch keine Karten gescannt</string>
+</resources>

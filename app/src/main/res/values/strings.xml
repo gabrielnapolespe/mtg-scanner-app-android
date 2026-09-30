@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">MTG-Scanner</string>
+    <string name="camera_view_title">Scan your card</string>
+    <string name="spanish_label">Spanish</string>
+    <string name="french_label">French</string>
+    <string name="german_label">German</string>
+    <string name="italian_label">Italian</string>
+    <string name="english_label">English</string>
+    <string name="photo_button_text">Capture</string>
+    <string name="scan_button_text">Scan</string>
+    <string name="discard_button_text">Discard</string>
+    <string name="required_access_camera_message">Camera access required</string>
+    <string name="invert_lang_text">Invert languages</string>
+    <string name="error_scan_message">Error capturing the card text</string>
+    <string name="close_button_text">Close</string>
+    <string name="image_preview_alt_text">Captured image</string>
+    <string name="card_ilustration_alt_text">Card illustration artwork</string>
+    <string name="card_preview_alt_text">Captured card preview</string>
+    <string name="scan_new_card_button_text">Scan New Card</string>
+    <string name="error_download_art_text">Error downloading art</string>
+    <string name="collection_text">Collection</string>
+    <string name="see_collection_button_text">See Collection</string>
+    <string name="card_details_nav_title">Card Details</string>
+    <string name="card_history_nav_title">Cards History</string>
+    <string name="scanned_on_text">Scanned on</string>
+    <string name="open_menu_icon_content_desc">Open menu</string>
+    <string name="sort_cards_icon_content_desc">Sort cards</string>
+    <string name="newest_first_dropdown_option">Newest first</string>
+    <string name="oldest_first_dropdown_option">Oldest first</string>
+    <string name="by_name_dropdown_option">Per nome (A-Z)</string>
+    <string name="no_scanned_card_history_text">You haven\'t scanned any cards yet</string>
+</resources>
