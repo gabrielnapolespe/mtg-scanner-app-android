@@ -2,6 +2,7 @@ package com.zaziapps.mtg_scanner.ui.components
 
 import android.graphics.RectF
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.util.lerp
 import com.zaziapps.mtg_scanner.data.model.CardDetection
 import com.zaziapps.mtg_scanner.data.local.lang.getColorList
@@ -28,6 +30,7 @@ import com.zaziapps.mtg_scanner.ui.themes.Gold
 @Composable
 fun CardScannerOverlay(
     boundingBoxes: List<CardDetection>,
+    onItemClick: (CardDetection) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val smoothedBoxes = remember {
@@ -67,7 +70,32 @@ fun CardScannerOverlay(
         smoothedBoxes.value = newMap
     }
 
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier
+        .pointerInput(smoothedBoxes.value) {
+            detectTapGestures { tapOffset ->
+                val canvasWidth = size.width.toFloat()
+                val canvasHeight = size.height.toFloat()
+                val cameraAspectRatio = 4f / 3f
+                val widthScale = canvasWidth
+                val heightScale = canvasHeight * cameraAspectRatio
+                val yOffset = (canvasHeight - heightScale) / 2f
+
+                smoothedBoxes.value.values.forEach { card ->
+                    val rect = card.boundingBox
+
+                    val leftBoundary = (1f - rect.bottom) * widthScale
+                    val rightBoundary = (1f - rect.top) * widthScale
+                    val topBoundary = (rect.left * heightScale) + yOffset
+                    val bottomBoundary = (rect.right * heightScale) + yOffset
+
+                    if (tapOffset.x in leftBoundary..rightBoundary && tapOffset.y in topBoundary..bottomBoundary) {
+                        onItemClick(card)
+                        return@detectTapGestures
+                    }
+                }
+            }
+        } ) {
+
         val canvasWidth = size.width
         val canvasHeight = size.height
 

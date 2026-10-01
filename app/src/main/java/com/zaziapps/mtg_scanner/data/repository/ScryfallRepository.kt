@@ -43,7 +43,7 @@ class ScryfallRepository {
 
         // Build the Retrofit abstraction client infrastructure mapped to handle asynchronous server message serialization.
         val retrofit = Retrofit.Builder()
-            .baseUrl("https://scryfall.com")
+            .baseUrl("https://api.scryfall.com/")
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

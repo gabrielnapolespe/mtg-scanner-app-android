@@ -187,6 +187,13 @@ class MainActivity : ComponentActivity() {
                                                 android.util.Log.e("RoomMainActivity", "Error saving scanning card", e)
                                             }
                                         }
+                                    },
+                                    onScannedCardClick = { clickedCard ->
+                                        lifecycleScope.launch {
+                                            // Extracts details to populate state and view the clicked card's data sheet
+                                            val magicCard = scryfallViewModel.searchCardByName(clickedCard.foundTranslation!!.nameEs!!, "es")
+                                            themeViewModel.showCardDetail(magicCard)
+                                        }
                                     }
                                 )
                             }

@@ -55,12 +55,14 @@ import com.zaziapps.mtg_scanner.ui.themes.Gold
  * @param scryfallViewModel ViewModel interacting with the external Scryfall API.
  * @param onMenuClick Callback triggered to expand the global navigation sidebar menu.
  * @param onCardScanned Callback triggered when a card data object is fetched and confirmed.
+ * @param onScannedCardClick Callback triggered when a card overlay is clicked.
  */
 @Composable
 fun CameraView(
     scryfallViewModel: ScryfallViewModel = viewModel(),
     onMenuClick: () -> Unit,
-    onCardScanned: (MagicCard) -> Unit
+    onCardScanned: (MagicCard) -> Unit,
+    onScannedCardClick: (CardDetection) -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -213,6 +215,11 @@ fun CameraView(
 
                         CardScannerOverlay(
                             boundingBoxes = detectedCardsRects,
+                            onItemClick ={ cardDetected ->
+                                if (cardDetected.foundTranslation != null) {
+                                    onScannedCardClick(cardDetected)
+                                }
+                            },
                             modifier = Modifier.fillMaxSize()
                         )
 
