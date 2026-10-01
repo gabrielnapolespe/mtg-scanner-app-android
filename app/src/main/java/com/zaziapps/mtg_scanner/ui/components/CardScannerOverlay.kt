@@ -83,10 +83,11 @@ fun CardScannerOverlay(
                 smoothedBoxes.value.values.forEach { card ->
                     val rect = card.boundingBox
 
-                    val leftBoundary = (1f - rect.bottom) * widthScale
-                    val rightBoundary = (1f - rect.top) * widthScale
-                    val topBoundary = (rect.left * heightScale) + yOffset
-                    val bottomBoundary = (rect.right * heightScale) + yOffset
+                    val boundaries = getUiBoundaries(rect, widthScale, heightScale, yOffset)
+                    val leftBoundary = boundaries["left"] ?: 0f
+                    val rightBoundary = boundaries["right"] ?: 0f
+                    val topBoundary = boundaries["top"] ?: 0f
+                    val bottomBoundary = boundaries["bottom"] ?: 0f
 
                     if (tapOffset.x in leftBoundary..rightBoundary && tapOffset.y in topBoundary..bottomBoundary) {
                         onItemClick(card)
@@ -113,10 +114,11 @@ fun CardScannerOverlay(
             val rect = card.boundingBox
 
             // Map and translate normalized relative float positions into absolute viewport drawing pixel boundaries.
-            val leftBoundary = (1f - rect.bottom) * widthScale
-            val rightBoundary = (1f - rect.top) * widthScale
-            val topBoundary = (rect.left * heightScale) + yOffset
-            val bottomBoundary = (rect.right * heightScale) + yOffset
+            val boundaries = getUiBoundaries(rect, widthScale, heightScale, yOffset)
+            val leftBoundary = boundaries["left"] ?: 0f
+            val rightBoundary = boundaries["right"] ?: 0f
+            val topBoundary = boundaries["top"] ?: 0f
+            val bottomBoundary = boundaries["bottom"] ?: 0f
 
             if (rightBoundary > leftBoundary && bottomBoundary > topBoundary) {
                 val topLeftOffset = Offset(leftBoundary, topBoundary)
@@ -167,6 +169,30 @@ fun CardScannerOverlay(
             }
         }
     }
+}
+
+/**
+ * Maps and rotates raw machine learning detection coordinates into scalable UI display boundaries.
+ * Converts normalized sensor-space coordinates into an associative map of pixel-ready dimension tokens.
+ *
+ * @param rect The raw bounding box layout configuration from the model inference.
+ * @param widthScale The calculated scaling factor applied to horizontal canvas dimensions.
+ * @param heightScale The calculated scaling factor applied to vertical canvas dimensions.
+ * @param yOffset The vertical spacing translation applied to center the viewfinder layer.
+ * @return An associative map containing "left", "right", "top", and "bottom" coordinate tokens.
+ */
+private fun getUiBoundaries(
+    rect: RectF,
+    widthScale: Float,
+    heightScale: Float,
+    yOffset: Float
+): Map<String, Float> {
+    return mapOf(
+        "left" to (1f - rect.bottom) * widthScale,
+        "right" to (1f - rect.top) * widthScale,
+        "top" to (rect.left * heightScale) + yOffset,
+        "bottom" to (rect.right * heightScale) + yOffset
+    )
 }
 
 /**
