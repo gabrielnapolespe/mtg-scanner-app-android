@@ -20,7 +20,6 @@ data class ScannerState(
 )
 
 
-// TODO: OnItemClick
 /**
  * Data architecture component tracking an individual card object isolated by the vision system.
  * Encapsulates computer vision tracking metrics along with runtime UI reactive translations.
