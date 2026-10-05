@@ -39,7 +39,7 @@ class AuthRepository(
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(false)
                 .setServerClientId(context.getString(R.string.default_web_client_id))
-                .setAutoSelectEnabled(true)
+                .setAutoSelectEnabled(false)
                 .build()
 
             // 2. Build the credential request with the configured option

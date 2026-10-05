@@ -168,26 +168,6 @@ class MainActivity : ComponentActivity() {
                             ScanScreen.SCAN_CAM -> {
                                 CameraView(
                                     onMenuClick = { coroutineScope.launch { drawerState.open() } }, // Handles menu open event
-                                    onCardScanned = {card ->
-                                        lifecycleScope.launch(Dispatchers.IO) {
-                                            try {
-                                                val cardEntity = ScannedCard(
-                                                    scryfallId = card.id,
-                                                    name = card.printedName ?: "Unknown",
-                                                    urlImage = card.imageUris?.normal ?: "",
-                                                    magicCard = card
-                                                )
-                                                scannedCardDao.insertCardIntoHistory(cardEntity)
-
-                                                // Once saved, show card detail UI
-                                                launch(Dispatchers.Main) {
-                                                    themeViewModel.showCardDetail(card)
-                                                }
-                                            } catch (e: Exception) {
-                                                android.util.Log.e("RoomMainActivity", "Error saving scanning card", e)
-                                            }
-                                        }
-                                    },
                                     onScannedCardClick = { clickedCard ->
                                         lifecycleScope.launch {
                                             // Extracts details to populate state and view the clicked card's data sheet

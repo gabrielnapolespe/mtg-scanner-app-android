@@ -16,39 +16,45 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.util.lerp
+import com.zaziapps.mtg_scanner.data.local.lang.CardTranslations
 import com.zaziapps.mtg_scanner.data.model.CardDetection
 import com.zaziapps.mtg_scanner.data.local.lang.getColorList
+import com.zaziapps.mtg_scanner.data.model.TrackedCard
+import com.zaziapps.mtg_scanner.data.states.RecognitionState
 import com.zaziapps.mtg_scanner.ui.themes.Gold
 
 /**
  * UI graphic overlay layer that draws animated, smoothed bounding boxes over tracked card items.
  * Computes spatial coordinate transformations to scale normalized camera boundaries onto the active display canvas.
  *
- * @param boundingBoxes The collection of incoming [CardDetection] targets identified in the current video frame.
+ * @param boundingBoxes The collection of incoming [TrackedCard] targets identified in the current video frame.
+ * @param onItemClick Callback executed when a user taps within the geometric boundaries of a tracked card frame.
  * @param modifier Structural styling or layout modifiers delegated down to the drawing canvas layer.
  */
 @Composable
 fun CardScannerOverlay(
-    boundingBoxes: List<CardDetection>,
-    onItemClick: (CardDetection) -> Unit,
+    boundingBoxes: List<TrackedCard>,
+    onItemClick: (TrackedCard) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Local memory cache map holding stabilized box track data to prevent visual coordinate snapping
     val smoothedBoxes = remember {
-        mutableStateOf<Map<Int, CardDetection>>(emptyMap())
+        mutableStateOf<Map<Int, TrackedCard>>(emptyMap())
     }
 
-    // Define the linear interpolation coefficient to regulate coordinate animation tracking speeds.
+    // Interpolation factor weight utilized to smooth out bounding box transformations across frame increments
     val lerpFactor = 0.35f
 
+    // Recompute and linear-interpolate tracking changes whenever a fresh batch of items is emitted by the analyzer pipeline
     LaunchedEffect(boundingBoxes) {
         val currentMap = smoothedBoxes.value
-        val newMap = mutableMapOf<Int, CardDetection>()
+        val newMap = mutableMapOf<Int, TrackedCard>()
 
         boundingBoxes.forEach { target ->
             val previous = currentMap[target.id]
 
             if (previous != null) {
-                // Apply a linear interpolation calculation to smooth out box tracking paths across spatial adjustments.
+                // Compute Linear Interpolation (LERP) coordinates across all four vector points of the box
                 val smoothedRect = RectF(
                     lerp(previous.boundingBox.left, target.boundingBox.left, lerpFactor),
                     lerp(previous.boundingBox.top, target.boundingBox.top, lerpFactor),
@@ -56,79 +62,64 @@ fun CardScannerOverlay(
                     lerp(previous.boundingBox.bottom, target.boundingBox.bottom, lerpFactor)
                 )
 
-                val copiedCard = target.copy(boundingBox = smoothedRect)
-
-                // Retain historical metadata records manually across the target duplication pipeline process.
-                copiedCard.foundTranslation = target.foundTranslation ?: previous.foundTranslation
-
-                newMap[target.id] = copiedCard
+                // Clone entire metadata payload while merging the freshly smoothed geometric coordinates
+                newMap[target.id] = target.copy(boundingBox = smoothedRect)
             } else {
+                // Instantly append new track instances directly to the active map context to avoid missing frames
                 newMap[target.id] = target
             }
         }
-
         smoothedBoxes.value = newMap
     }
 
-    Canvas(modifier = modifier
-        .pointerInput(smoothedBoxes.value) {
-            detectTapGestures { tapOffset ->
-                val canvasWidth = size.width.toFloat()
-                val canvasHeight = size.height.toFloat()
-                val cameraAspectRatio = 4f / 3f
-                val widthScale = canvasWidth
-                val heightScale = canvasHeight * cameraAspectRatio
-                val yOffset = (canvasHeight - heightScale) / 2f
+    Canvas(
+        modifier = modifier
+            .pointerInput(smoothedBoxes.value) {
+                // Register gesture interaction filters onto the active drawing surface area
+                detectTapGestures { tapOffset ->
+                    val canvasWidth = size.width.toFloat()
+                    val canvasHeight = size.height.toFloat()
+                    val cameraAspectRatio = 4f / 3f
+                    val widthScale = canvasWidth
+                    val heightScale = canvasHeight * cameraAspectRatio
+                    val yOffset = (canvasHeight - heightScale) / 2f
 
-                smoothedBoxes.value.values.forEach { card ->
-                    val rect = card.boundingBox
+                    // Iterate over current tracked boxes to find intersection points matching user click coordinates
+                    smoothedBoxes.value.values.forEach { card ->
+                        val rect = card.boundingBox
+                        val boundaries = getUiBoundaries(rect, widthScale, heightScale, yOffset)
 
-                    val boundaries = getUiBoundaries(rect, widthScale, heightScale, yOffset)
-                    val leftBoundary = boundaries["left"] ?: 0f
-                    val rightBoundary = boundaries["right"] ?: 0f
-                    val topBoundary = boundaries["top"] ?: 0f
-                    val bottomBoundary = boundaries["bottom"] ?: 0f
-
-                    if (tapOffset.x in leftBoundary..rightBoundary && tapOffset.y in topBoundary..bottomBoundary) {
-                        onItemClick(card)
-                        return@detectTapGestures
+                        // Disambiguate if tap coordinates fall inside the active transformed rectangle space bounds
+                        if (tapOffset.x in boundaries.left..boundaries.right &&
+                            tapOffset.y in boundaries.top..boundaries.bottom) {
+                            onItemClick(card)
+                            return@detectTapGestures
+                        }
                     }
                 }
             }
-        } ) {
-
+    ) {
         val canvasWidth = size.width
         val canvasHeight = size.height
-
-        // Establish the expected baseline aspect ratio tracking standard camera sensor proportions.
         val cameraAspectRatio = 4f / 3f
-
-        // Calculate absolute drawing scales accounting for inverted orientation distribution models.
         val widthScale = canvasWidth
         val heightScale = canvasHeight * cameraAspectRatio
-
-        // Compute vertical shift variations required to center layout shapes post aspect correction.
         val yOffset = (canvasHeight - heightScale) / 2f
 
+        // Draw structural frames onto the canvas view for each tracking record active in this loop iteration
         smoothedBoxes.value.values.forEach { card ->
             val rect = card.boundingBox
-
-            // Map and translate normalized relative float positions into absolute viewport drawing pixel boundaries.
             val boundaries = getUiBoundaries(rect, widthScale, heightScale, yOffset)
-            val leftBoundary = boundaries["left"] ?: 0f
-            val rightBoundary = boundaries["right"] ?: 0f
-            val topBoundary = boundaries["top"] ?: 0f
-            val bottomBoundary = boundaries["bottom"] ?: 0f
 
-            if (rightBoundary > leftBoundary && bottomBoundary > topBoundary) {
-                val topLeftOffset = Offset(leftBoundary, topBoundary)
-                val rectSize = Size(rightBoundary - leftBoundary, bottomBoundary - topBoundary)
+            // Guard against negative boundaries, inverse dimensions, or corrupted frame geometry configurations
+            if (boundaries.right > boundaries.left && boundaries.bottom > boundaries.top) {
+                val topLeftOffset = Offset(boundaries.left, boundaries.top)
+                val rectSize = Size(boundaries.right - boundaries.left, boundaries.bottom - boundaries.top)
 
-                // Obtain colors list
-                val uiColors = getCardColors(card)
+                val uiColors = getCardColors(card.foundTranslation)
 
                 when {
-                    // If card has 2 colors, drawRoundRect is painted with brush
+                    // Multicolor card profile containing exactly two identity flags -> Render balanced split linear gradient brush
                     uiColors.size == 2 -> {
                         drawRoundRect(
                             brush = Brush.horizontalGradient(
@@ -136,8 +127,8 @@ fun CardScannerOverlay(
                                 0.5f to uiColors[0],
                                 0.5f to uiColors[1],
                                 1.0f to uiColors[1],
-                                startX = leftBoundary,
-                                endX = rightBoundary
+                                startX = boundaries.left,
+                                endX = boundaries.right
                             ),
                             topLeft = topLeftOffset,
                             size = rectSize,
@@ -145,17 +136,33 @@ fun CardScannerOverlay(
                             style = Stroke(width = 6f)
                         )
                     }
-                    // If card has 1 colors or none, drawRoundRect is painted normally using card color
-                    uiColors.size <= 1 -> {
+                    // Monocolor identity alignment -> Render unified solid tone structural frame
+                    uiColors.size == 1 -> {
                         drawRoundRect(
-                            color = uiColors.firstOrNull() ?: Color(0xFFE91E63), // If Card has none color, place loading color frame (Pink)
+                            color = uiColors.first(),
                             topLeft = topLeftOffset,
                             size = rectSize,
                             cornerRadius = CornerRadius(24f, 24f),
                             style = Stroke(width = 6f)
                         )
                     }
-                    // If card has 3 colors or more, drawRoundRect is painted normally with Gold (0xFFD4AF37)
+                    // Colorless identity profile or unparsed recognition data payload -> Delegate status colors based on execution phase
+                    uiColors.isEmpty() -> {
+                        val frameColor = if (card.recognitionState == RecognitionState.RESOLVED) {
+                            Color(0xFF828283) // Colorless or land element structural gray
+                        } else {
+                            Color(0xFFE91E63) // Active system processing/loading indication pink
+                        }
+
+                        drawRoundRect(
+                            color = frameColor,
+                            topLeft = topLeftOffset,
+                            size = rectSize,
+                            cornerRadius = CornerRadius(24f, 24f),
+                            style = Stroke(width = 6f)
+                        )
+                    }
+                    // Hybrid multi-color identity (3 or more elements) -> Render high-tier premium Gold styling frame
                     else -> {
                         drawRoundRect(
                             color = Gold,
@@ -170,6 +177,8 @@ fun CardScannerOverlay(
         }
     }
 }
+
+
 
 /**
  * Maps and rotates raw machine learning detection coordinates into scalable UI display boundaries.
@@ -186,12 +195,12 @@ private fun getUiBoundaries(
     widthScale: Float,
     heightScale: Float,
     yOffset: Float
-): Map<String, Float> {
-    return mapOf(
-        "left" to (1f - rect.bottom) * widthScale,
-        "right" to (1f - rect.top) * widthScale,
-        "top" to (rect.left * heightScale) + yOffset,
-        "bottom" to (rect.right * heightScale) + yOffset
+): RectF {
+    return RectF(
+        (1f - rect.bottom) * widthScale,
+        (rect.left * heightScale) + yOffset,
+        (1f - rect.top) * widthScale,
+        (rect.right * heightScale) + yOffset
     )
 }
 
@@ -201,8 +210,8 @@ private fun getUiBoundaries(
  * @param card The individual card track snapshot configuration to inspect.
  * @return A list of Compose Color tokens representing the card's color profile.
  */
-private fun getCardColors(card: CardDetection): List<Color> {
-    val colorCodes = card.foundTranslation
+private fun getCardColors(card: CardTranslations?): List<Color> {
+    val colorCodes = card
         ?.getColorList()
         ?: return emptyList()
 

@@ -32,56 +32,43 @@ import androidx.concurrent.futures.await
 import com.zaziapps.mtg_scanner.data.model.CardDetection
 import com.zaziapps.mtg_scanner.analyzer.TextAnalyzer
 import com.zaziapps.mtg_scanner.analyzer.CardAnalyzer
+import com.zaziapps.mtg_scanner.analyzer.CardTracker
 import com.zaziapps.mtg_scanner.data.local.lang.CardTranslations
+import com.zaziapps.mtg_scanner.data.model.TrackedCard
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
  * Interface element providing a realtime viewfinder preview stream backed by the CameraX hardware pipeline.
  * Coordinates model detection analysis routines concurrently alongside interactive graphics layouts.
  *
+ * @param mainHandler Handler attached to the main execution thread to safely dispatch UI update callbacks.
+ * @param analysisExecutor Background thread service dedicated to running heavy computer vision inference jobs.
+ * @param cardTracker Persistent tracking manager that filters, smooths, and maps raw target bounding boxes.
  * @param imageCapture Shared asset layer configured to lock image frames for data capture executions.
  * @param modifier Structural styling constraints delegated down to surface view configurations.
- * @param cardTextAnalyzer Asynchronous character tracking framework running text recognition sweeps.
- * @param onCardDetectionChanged Functional validation dispatcher returning true when target objects occupy the preview framework.
- * @param onCardsGeometriesDetected Vector updates mapping individual bounding configurations across screen layout dimensions.
- * @param onCardNameExtracted Meta callback executing localized tracking properties back down to state controllers.
+ * @param onCardUpdated Callback invoked whenever the tracking routine completes a processing sweep over a frame.
  */
 @OptIn(ExperimentalGetImage::class)
 @Composable
 fun CameraPreview(
+    mainHandler: Handler,
+    analysisExecutor: ExecutorService,
+    cardTracker: CardTracker,
     imageCapture: ImageCapture,
     modifier: Modifier = Modifier,
-    cardTextAnalyzer: TextAnalyzer,
-    onCardDetectionChanged: (Boolean) -> Unit,
-    onCardsGeometriesDetected: (cards: List<CardDetection>) -> Unit,
-    onCardNameExtracted: (cards: List<CardDetection>) -> Unit
+    onCardUpdated: (List<TrackedCard>) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Holds the active request required to link the device camera stream to the Compose layout hierarchy
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
 
-    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
-    val captureExecutor = remember { Executors.newSingleThreadExecutor() }
-    val mainHandler = remember { Handler(Looper.getMainLooper()) }
-
-    // Maintain a concurrent thread-safe collection mapping cards currently visible within the viewer context.
-    val persistentCardsOnScreen = remember { java.util.concurrent.ConcurrentHashMap<Int, CardDetection>() }
-    val translationCache = remember { java.util.concurrent.ConcurrentHashMap<Int, CardTranslations>() }
-
-    // Define the grace period window representing how many frames an item can drop visibility before total structural removal.
-    val maxGraceFrames = 6
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // Relieve hardware threading dependencies and intercept execution memory leaks early during structural destruction.
-            mainHandler.removeCallbacksAndMessages(null)
-            analysisExecutor.shutdown()
-            captureExecutor.shutdown()
-        }
-    }
-
+    // Initialize and bind the hardware camera lifecycle whenever the owner host instance resets
     LaunchedEffect(lifecycleOwner) {
         try {
+            // Asynchronously fetch the camera process orchestration singleton instance
             val cameraProvider = ProcessCameraProvider.getInstance(context).await()
 
             // Build target pixel selection constraints specialized to match local hardware processing engine constraints.
@@ -100,10 +87,12 @@ fun CameraPreview(
                 )
                 .build()
 
+            // Set up the preview pipeline layer using the predefined resolution constraints configuration
             val preview = Preview.Builder()
                 .setResolutionSelector(targetResolutionSelector)
                 .build()
 
+            // Connect the preview pipeline emitter directly to our observable UI surface variable pointer
             preview.setSurfaceProvider { request -> surfaceRequest = request }
 
             // Allocate hardware profile settings ensuring input frame backpressure streams retain only the most current imagery data.
@@ -113,67 +102,24 @@ fun CameraPreview(
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
 
-            imageAnalysis.setAnalyzer(analysisExecutor, CardAnalyzer(context) { incomingDetections ->
-                // Process recent spatial inferences via indexed iterations to bypass implicit allocation loads.
-                for (i in 0 until incomingDetections.size) {
-                    val newCard = incomingDetections[i]
-                    val existingCard = persistentCardsOnScreen[newCard.id]
-
-                    if (existingCard != null) {
-                        // Resynchronize spatial alignments while preserving active data attributes.
-                        existingCard.foundTranslation = newCard.foundTranslation ?: translationCache[newCard.id]
-                        persistentCardsOnScreen[newCard.id] = newCard.copy(framesAlive = maxGraceFrames).apply {
-                            foundTranslation = existingCard.foundTranslation
-                        }
-                    } else {
-                        newCard.framesAlive = maxGraceFrames
-                        newCard.foundTranslation = translationCache[newCard.id]
-                        persistentCardsOnScreen[newCard.id] = newCard
+            // Attach the customized card segmentation engine analyzer routine to the background thread pool
+            imageAnalysis.setAnalyzer(
+                analysisExecutor,
+                CardAnalyzer(context, cardTracker) { trackedCards ->
+                    // Route processed frame results back onto the primary application thread context
+                    mainHandler.post {
+                        onCardUpdated(trackedCards)
                     }
                 }
+            )
 
-                // Execute an in-place structural cleaning sweep across stored tracks to subtract lifespans from vanished targets.
-                val iterator = persistentCardsOnScreen.iterator()
-                while (iterator.hasNext()) {
-                    val entry = iterator.next()
-                    val savedId = entry.key
-                    val savedCard = entry.value
-
-                    var matchDiscovered = false
-                    for (j in 0 until incomingDetections.size) {
-                        if (incomingDetections[j].id == savedId) {
-                            matchDiscovered = true
-                            break
-                        }
-                    }
-
-                    if (!matchDiscovered) {
-                        savedCard.framesAlive -= 1
-                        if (savedCard.framesAlive <= 0) {
-                            iterator.remove()
-                            translationCache.remove(savedId)
-                        }
-                    } else {
-                        // Consolidate resolved translation models inside historical lookup buffers.
-                        savedCard.foundTranslation?.let { translationCache[savedId] = it }
-                    }
-                }
-
-                // Populate explicit dispatch structures to forward updated track collections directly over to screen layers.
-                val listForUi = ArrayList<CardDetection>(persistentCardsOnScreen.size).apply {
-                    addAll(persistentCardsOnScreen.values)
-                }
-
-                mainHandler.post {
-                    onCardNameExtracted(listForUi)
-                    onCardsGeometriesDetected(listForUi)
-                    onCardDetectionChanged(listForUi.isNotEmpty())
-                }
-            })
-
+            // Select the default physical rear camera component as the primary input sensor source
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
+            // Detach any previous use cases before appending fresh configurations to avoid pipeline state collision errors
             cameraProvider.unbindAll()
+
+            // Register the configured use cases into the application lifecycle manager loop
             cameraProvider.bindToLifecycle(
                 lifecycleOwner,
                 cameraSelector,
@@ -183,6 +129,7 @@ fun CameraPreview(
             )
 
         } catch (e: Exception) {
+            // Record failure footprints inside error diagnostics logs if the hardware connection aborts
             Log.e("CameraPreview", "Failed to bind CameraX provider configurations", e)
         }
     }

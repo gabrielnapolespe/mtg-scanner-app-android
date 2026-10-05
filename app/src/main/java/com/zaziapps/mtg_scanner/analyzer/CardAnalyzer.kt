@@ -1,13 +1,12 @@
 package com.zaziapps.mtg_scanner.analyzer
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.RectF
 import android.util.Log
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import com.zaziapps.mtg_scanner.data.model.CardDetection
+import com.zaziapps.mtg_scanner.data.model.TrackedCard
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
@@ -25,7 +24,8 @@ import org.tensorflow.lite.support.image.ops.ResizeOp
  */
 class CardAnalyzer(
     private val context: Context,
-    private val onCardsDetected: (List<CardDetection>) -> Unit
+    private val cardTracker: CardTracker,
+    private val onCardsUpdated: (List<TrackedCard>) -> Unit
 ) : ImageAnalysis.Analyzer {
 
     /**
@@ -34,12 +34,8 @@ class CardAnalyzer(
     private val interpreter: Interpreter
 
     /**
-     * Tracker component responsible for consolidating and maintaining detection persistence across frames.
-     */
-    private val cardTracker = CardTracker()
-
-    /**
      * Image processor configured to resize and normalize the Bitmap before inference.
+     * Resizes the image to 320x320 pixels using bilinear interpolation and maps pixel values.
      */
     private val imageProcessor = ImageProcessor.Builder()
         .add(ResizeOp(320, 320, ResizeOp.ResizeMethod.BILINEAR))
@@ -69,12 +65,20 @@ class CardAnalyzer(
     )
 
     init {
+        // Load the TFLite model file from the assets folder into a memory-mapped buffer
         val modelBuffer = FileUtil.loadMappedFile(context, "model_tflite.tflite")
+
+        // Configure interpreter options, setting the execution thread count to 4 for optimization
         val options = Interpreter.Options().apply {
             setNumThreads(4)
         }
+
+        // Initialize the interpreter with the model file and the configured options
         interpreter = Interpreter(modelBuffer, options)
     }
+
+    /** Pre-allocated Float32 TensorImage structure used to feed pixel data into the processor. */
+    private val tensorImage = TensorImage(DataType.FLOAT32)
 
     /**
      * Analyzes a camera frame in real-time using TensorFlow Lite inference.
@@ -85,124 +89,78 @@ class CardAnalyzer(
      */
     @ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image
-        if (mediaImage != null) {
-            try {
-                // Extract the raw image frame from CameraX pipeline and convert it into a standard Bitmap object.
-                val originalBitmap = imageProxy.toBitmap()
+        try {
+            // Early return if the proxy does not contain a valid media image object
+            if (imageProxy.image == null) return
 
-                // Initialize a TensorImage container compatible with TensorFlow Lite using FLOAT32 data type.
-                val tensorImage = TensorImage(DataType.FLOAT32)
-                tensorImage.load(originalBitmap)
+            // Convert the incoming hardware image frame into an actionable Android Bitmap object
+            val originalBitmap = imageProxy.toBitmap()
 
-                // Run the image through the pre-configured processor pipeline to handle resizing (320x320) and normalization.
-                val processedImage = imageProcessor.process(tensorImage)
-                val byteBufferInput = processedImage.buffer
+            // Load the bitmap pixels into the pre-allocated TensorImage structure
+            tensorImage.load(originalBitmap)
 
-                // Execute the machine learning model inference using the input buffer and map outputs directly to pre-allocated arrays.
-                interpreter.runForMultipleInputsOutputs(arrayOf(byteBufferInput), outputMap)
+            // Apply resizing and normalization transformations to match model input requirements
+            val processedImage = imageProcessor.process(tensorImage)
 
-                val tempBoxes = mutableListOf<RectF>()
-                val tempConfidences = mutableListOf<Float>()
-                val tempClasses = mutableListOf<Int>()
+            // Reset the internal buffer pointer to zero to prepare it for reading operations
+            processedImage.buffer.rewind()
 
-                // Determine the exact number of objects detected by rounding the raw output float value, capped at a maximum of 10.
-                val objectCount = (numDetections[0] + 0.5f).toInt().coerceIn(0, 10)
+            // Execute the neural network inference using the pre-allocated output target arrays
+            interpreter.runForMultipleInputsOutputs(
+                arrayOf(processedImage.buffer),
+                outputMap
+            )
 
-                // Iterate through the valid detection arrays to filter out predictions that fall below the minimum confidence threshold.
-                for (i in 0 until objectCount) {
-                    val confidence = outputScores[0][i]
-                    if (confidence > 0.65f) {
-                        val box = outputLocations[0][i]
+            // Temporary collection lists initialized to collect prediction metrics for this frame
+            val tempBoxes = mutableListOf<RectF>()
+            val tempConfidences = mutableListOf<Float>()
+            val tempClasses = mutableListOf<Int>()
 
-                        // Map the raw bounding box indices correctly to account for standard sensor orientation rotations.
-                        val rectF = RectF(box[1], box[0], box[3], box[2])
+            // Extract the reported count of valid objects, adding rounding padding and constraining limits
+            val objectCount =
+                (numDetections[0] + 0.5f)
+                    .toInt()
+                    .coerceIn(0, 10)
 
-                        tempBoxes.add(rectF)
-                        tempConfidences.add(confidence)
-                        tempClasses.add(outputClasses[0][i].toInt())
-                    }
-                }
+            // Iterate over each detected object up to the maximum constrained object count limit
+            for (i in 0 until objectCount) {
+                val confidence = outputScores[0][i]
+//                if (confidence > CONFIDENCE_THRESHOLD) {
+                val box = outputLocations[0][i]
 
-                // Pass raw frame detections to the tracker to maintain temporal continuity and reduce UI bounding box flickering.
-                val consolidatedCards = cardTracker.update(
-                    tempBoxes,
-                    tempConfidences,
-                    tempClasses
+                // Construct a RectF bounding box mapped from the structured output coordinates array
+                tempBoxes.add(
+                    RectF(
+                        box[1], box[0],
+                        box[3], box[2]
+                    )
                 )
-
-                // Map over the consolidated card tracks to generate localized graphic crops from the high-resolution original bitmap.
-                val cardsWithBitmap = consolidatedCards.map { detection ->
-                    val croppedBitmap = cropCard(
-                        bitmap = originalBitmap,
-                        normalizedBox = detection.boundingBox
-                    )
-                    detection.copy(
-                        bitmap = croppedBitmap
-                    )
-                }
-
-                // Dispatch the final list of fully structured, tracked card objects back to the primary UI or state layer.
-                onCardsDetected(cardsWithBitmap)
-
-            } catch (e: Exception) {
-                Log.e("CardAnalyzer", "Inference error: ${e.message}")
-            } finally {
-                // Explicitly close the ImageProxy instance to release the hardware buffer lock and prevent pipeline stall.
-                imageProxy.close()
+                tempConfidences.add(confidence)
+                tempClasses.add(
+                    outputClasses[0][i].toInt()
+                )
+                // }
             }
-        } else {
+
+            // Submit the structural predictions into the tracker instance to handle multi-frame continuity
+            val trackedCards = cardTracker.update(
+                tempBoxes,
+                tempConfidences,
+                tempClasses
+            )
+
+            // Forward the updated list of tracked cards to the main consumer execution block
+            onCardsUpdated(trackedCards)
+        } catch (e: Exception) {
+            // Log any unexpected internal runtime or inference exceptions encountered during analysis
+            Log.e(
+                "CardAnalyzer",
+                "Inference error: ${e.message}"
+            )
+        } finally {
+            // Close the frame proxy wrapper container to free up the hardware image resource allocation
             imageProxy.close()
         }
     }
 
-    /**
-     * Crops a specific region from a Bitmap using normalized coordinates (0.0 to 1.0).
-     *
-     * @param bitmap The source high-resolution Bitmap.
-     * @param normalizedBox RectF structure containing the relative boundaries of the detected card.
-     * @return A new [Bitmap] containing only the isolated card area, or null if the calculated dimensions are invalid.
-     */
-    private fun cropCard(
-        bitmap: Bitmap,
-        normalizedBox: RectF
-    ): Bitmap? {
-        // Scale normalized relative boundaries back to the physical pixel width dimensions of the source image.
-        val left = (normalizedBox.left * bitmap.width)
-            .toInt()
-            .coerceIn(0, bitmap.width - 1)
-
-        // Scale normalized relative boundaries back to the physical pixel height dimensions of the source image.
-        val top = (normalizedBox.top * bitmap.height)
-            .toInt()
-            .coerceIn(0, bitmap.height - 1)
-
-        // Compute the right boundary point, ensuring it remains within image coordinates and greater than the left coordinate.
-        val right = (normalizedBox.right * bitmap.width)
-            .toInt()
-            .coerceIn(left + 1, bitmap.width)
-
-        // Compute the bottom boundary point, ensuring it remains within image coordinates and greater than the top coordinate.
-        val bottom = (normalizedBox.bottom * bitmap.height)
-            .toInt()
-            .coerceIn(top + 1, bitmap.height)
-
-        // Derive total bounding box width and height values from calculated absolute coordinate positions.
-        val width = right - left
-        val height = bottom - top
-
-        // Validate structural integrity of dimensions to prevent execution errors during sub-bitmap generation.
-        if (width <= 0 || height <= 0) {
-            return null
-        }
-
-        // Create and return a newly isolated, hardware-backed sub-bitmap slice from the source element.
-        return Bitmap.createBitmap(
-            bitmap,
-            left,
-            top,
-            width,
-            height
-        )
-    }
 }
