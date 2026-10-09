@@ -37,6 +37,7 @@ class CardTracker {
 
         /** Tolerance window percentage allowed for perspective distortion and camera angles. */
         const val ASPECT_RATIO_TOLERANCE = 0.50f
+        const val FRAMES_TO_RETRY_FAILED = 30 // CHANGE
     }
 
     /**
@@ -55,7 +56,10 @@ class CardTracker {
         var foundTranslation: CardTranslations? = null,
 
         /** New tracks default to CANDIDATE to prevent frame noise from causing false positives. */
-        var recognitionState: RecognitionState = RecognitionState.CANDIDATE
+        var recognitionState: RecognitionState = RecognitionState.CANDIDATE,
+
+        /** New failed frames counter that tracker waits before retrying card search  */
+        var failedFramesCounter: Int = 0 // CHANGE
     )
 
     /** Active pool of tracking instances maintained across frames. */
@@ -114,7 +118,14 @@ class CardTracker {
                 match.missedFrames = 0
 
                 // Promote track state status once durability frame benchmarks are cleared
-                if (match.recognitionState == RecognitionState.CANDIDATE &&
+                if (match.recognitionState == RecognitionState.FAILED) {
+                    match.failedFramesCounter++
+                    if (match.failedFramesCounter >= FRAMES_TO_RETRY_FAILED) {
+                        // Reset to TRACKING state and clean failed frames counter before re-scan
+                        match.recognitionState = RecognitionState.TRACKING
+                        match.failedFramesCounter = 0
+                    }
+                } else if (match.recognitionState == RecognitionState.CANDIDATE &&
                     match.detectionFrames >= MIN_DETECTION_FRAMES) {
                     match.recognitionState = RecognitionState.TRACKING
                 }
@@ -146,7 +157,7 @@ class CardTracker {
 
         // Drop historical track instances that have dropped below visibility thresholds
         tracks.removeAll { track ->
-            track.missedFrames > MAX_MISSED_FRAMES
+            track.missedFrames >= MAX_MISSED_FRAMES
         }
 
         // Transform internal objects into structured domain representation wrappers
