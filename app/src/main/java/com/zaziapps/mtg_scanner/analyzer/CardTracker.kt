@@ -36,7 +36,7 @@ class CardTracker {
         const val MTG_ASPECT_RATIO = 0.716f
 
         /** Tolerance window percentage allowed for perspective distortion and camera angles. */
-        const val ASPECT_RATIO_TOLERANCE = 0.50f
+        const val ASPECT_RATIO_TOLERANCE = 0.40f
         const val FRAMES_TO_RETRY_FAILED = 30 // CHANGE
     }
 
