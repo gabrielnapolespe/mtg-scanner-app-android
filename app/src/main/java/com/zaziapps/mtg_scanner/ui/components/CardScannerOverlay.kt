@@ -34,7 +34,6 @@ import com.zaziapps.mtg_scanner.ui.themes.Gold
 @Composable
 fun CardScannerOverlay(
     boundingBoxes: List<TrackedCard>,
-    onItemClick: (TrackedCard) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Local memory cache map holding stabilized box track data to prevent visual coordinate snapping
@@ -74,30 +73,6 @@ fun CardScannerOverlay(
 
     Canvas(
         modifier = modifier
-            .pointerInput(smoothedBoxes.value) {
-                // Register gesture interaction filters onto the active drawing surface area
-                detectTapGestures { tapOffset ->
-                    val canvasWidth = size.width.toFloat()
-                    val canvasHeight = size.height.toFloat()
-                    val cameraAspectRatio = 4f / 3f
-                    val widthScale = canvasWidth
-                    val heightScale = canvasHeight * cameraAspectRatio
-                    val yOffset = (canvasHeight - heightScale) / 2f
-
-                    // Iterate over current tracked boxes to find intersection points matching user click coordinates
-                    smoothedBoxes.value.values.forEach { card ->
-                        val rect = card.boundingBox
-                        val boundaries = getUiBoundaries(rect, widthScale, heightScale, yOffset)
-
-                        // Disambiguate if tap coordinates fall inside the active transformed rectangle space bounds
-                        if (tapOffset.x in boundaries.left..boundaries.right &&
-                            tapOffset.y in boundaries.top..boundaries.bottom) {
-                            onItemClick(card)
-                            return@detectTapGestures
-                        }
-                    }
-                }
-            }
     ) {
         val canvasWidth = size.width
         val canvasHeight = size.height

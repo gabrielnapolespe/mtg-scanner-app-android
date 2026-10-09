@@ -168,10 +168,10 @@ class MainActivity : ComponentActivity() {
                             ScanScreen.SCAN_CAM -> {
                                 CameraView(
                                     onMenuClick = { coroutineScope.launch { drawerState.open() } }, // Handles menu open event
-                                    onScannedCardClick = { clickedCard ->
+                                    onScannedCardClick = { cardName ->
                                         lifecycleScope.launch {
                                             // Extracts details to populate state and view the clicked card's data sheet
-                                            val magicCard = scryfallViewModel.searchCardByName(clickedCard.foundTranslation!!.nameEs!!, "es")
+                                            val magicCard = scryfallViewModel.searchCardByName(cardName, "es")
                                             themeViewModel.showCardDetail(magicCard)
                                         }
                                     }

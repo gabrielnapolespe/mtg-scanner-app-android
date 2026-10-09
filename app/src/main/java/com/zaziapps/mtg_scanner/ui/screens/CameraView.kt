@@ -53,6 +53,8 @@ import com.zaziapps.mtg_scanner.data.local.lang.CardTranslations
 import com.zaziapps.mtg_scanner.data.model.TrackedCard
 import com.zaziapps.mtg_scanner.data.states.RecognitionState
 import com.zaziapps.mtg_scanner.ui.components.LoadingDialog
+import com.zaziapps.mtg_scanner.ui.components.ScannedCardItem
+import com.zaziapps.mtg_scanner.ui.components.ScannedCardsList
 import com.zaziapps.mtg_scanner.ui.themes.Black
 import com.zaziapps.mtg_scanner.ui.themes.Gold
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -72,7 +74,7 @@ import kotlin.coroutines.resume
 fun CameraView(
     scryfallViewModel: ScryfallViewModel = viewModel(),
     onMenuClick: () -> Unit,
-    onScannedCardClick: (TrackedCard) -> Unit
+    onScannedCardClick: (String) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -116,6 +118,7 @@ fun CameraView(
 
     // Local cached collection storing stabilized tracking coordinates for runtime UI box updates
     var detectedCardsRects by remember { mutableStateOf<List<TrackedCard>>(emptyList()) }
+    var scannedCardsList by remember { mutableStateOf(listOf<ScannedCardItem>()) }
 
     // System contract bridge to request hardware camera resource authorizations
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -249,11 +252,22 @@ fun CameraView(
                                                             if (detectedText.isNotBlank()) {
                                                                 val results = scryfallViewModel.searchCard(detectedText)
                                                                 val translation = results.firstOrNull()
+
                                                                 if (translation != null) {
-                                                                    // Identification successful: Commit metadata and transition status to RESOLVED
                                                                     cardTracker.updateRecognition(card.id, translation, RecognitionState.RESOLVED)
+
+                                                                    mainHandler.post {
+                                                                        val cardName = translation.nameEn ?: "Unknown Card"
+
+                                                                        val newItem = ScannedCardItem(
+                                                                            id = card.id,
+                                                                            name = cardName,
+                                                                            bitmap = correctedBitmap
+                                                                        )
+
+                                                                        scannedCardsList = listOf(newItem) + scannedCardsList.filter { it.name != translation.nameEn }
+                                                                    }
                                                                 } else {
-                                                                    // Network query matched no assets: Mark tracking instance as FAILED
                                                                     cardTracker.updateRecognitionState(card.id, RecognitionState.FAILED)
                                                                 }
                                                             } else {
@@ -281,12 +295,6 @@ fun CameraView(
 
                         CardScannerOverlay(
                             boundingBoxes = detectedCardsRects,
-                            onItemClick = { cardDetected ->
-                                // Safeguard navigation routes, triggering clicks exclusively for cards that hold parsed metadata
-                                if (cardDetected.foundTranslation != null) {
-                                    onScannedCardClick(cardDetected)
-                                }
-                            },
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
@@ -300,6 +308,17 @@ fun CameraView(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            ScannedCardsList(
+                scannedCards = scannedCardsList,
+                onItemClick = { name ->
+                    onScannedCardClick(name)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.7f)
+            )
         }
     }
     // Manage modal loading layout blocks triggered by active remote repository queries
