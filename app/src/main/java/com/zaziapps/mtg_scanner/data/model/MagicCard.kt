@@ -33,5 +33,14 @@ data class MagicCard(
     @SerializedName("rarity") val rarity: String?,
     @SerializedName("oracle_text") val oracleText: String?,
     @SerializedName("printed_text") val printedText: String?,
-    @SerializedName("lang") val lang: String?
+    @SerializedName("lang") val lang: String?,
+    @SerializedName("prices") val prices: MarketPrices?
+)
+
+data class MarketPrices(
+    @SerializedName("usd") val usd: String?,
+    @SerializedName("usd_foil") val usdFoil: String?,
+    @SerializedName("eur") val eur: String?,
+    @SerializedName("eur_foil") val eurFoil: String?,
+    @SerializedName("tix") val tix: String?
 )

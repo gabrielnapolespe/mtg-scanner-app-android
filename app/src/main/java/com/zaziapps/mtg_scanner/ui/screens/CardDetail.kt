@@ -3,6 +3,7 @@ package com.zaziapps.mtg_scanner.ui.screens
 import com.zaziapps.mtg_scanner.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +51,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import com.zaziapps.mtg_scanner.ui.components.LoadingDialog
 import androidx.compose.ui.graphics.Brush
+import com.zaziapps.mtg_scanner.data.model.CurrencyType
+import com.zaziapps.mtg_scanner.data.model.MarketPrices
 
 
 /**
@@ -165,7 +168,7 @@ fun MainScreenContainer(
 
     // Dynamic local state to control the selected language code (defaulting to current card's language)
     var selectedLangCode by remember(card?.id) { mutableStateOf(card?.lang ?: "en") }
-
+    var currentCurrency by remember { mutableStateOf(CurrencyType.USD) }
     val availableLanguages = rememberAvailableLanguages()
 
     // Reactively monitors selectedLangCode and triggers a query request only if it differs from the active card's language
@@ -379,6 +382,14 @@ fun MainScreenContainer(
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
             ) {
+                MarketPriceSection(
+                    prices = validatedCard?.prices,
+                    selectedCurrency = currentCurrency,
+                    onCurrencyChange = { newCurrency -> currentCurrency = newCurrency },
+                    textColor = selectedManaList.first().textColor,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
                 // Scryfall API data identifier logs
                 Text(
                     text = "Scryfall ID: ${validatedCard?.id ?: "---"}",
@@ -517,3 +528,96 @@ fun CardFallbackDataContainer(
         }
     }
 }
+
+@Composable
+fun MarketPriceSection(
+    prices: MarketPrices?,
+    selectedCurrency: CurrencyType,
+    onCurrencyChange: (CurrencyType) -> Unit,
+    textColor: Color,
+    modifier: Modifier = Modifier
+) {
+    if (prices == null) return
+
+    val (priceNormal, priceFoil) = when (selectedCurrency) {
+        CurrencyType.USD -> {
+            val normal = prices.usd?.let { "$$it" } ?: "---"
+            val foil = prices.usdFoil?.let { "✨ $$it" } ?: "---"
+            Pair(normal, foil)
+        }
+        CurrencyType.EUR -> {
+            val normal = prices.eur?.let { "€$it" } ?: "---"
+            val foil = prices.eurFoil?.let { "✨ €$it" } ?: "---"
+            Pair(normal, foil)
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "VALOR DE MERCADO",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = textColor.copy(alpha = 0.6f)
+            )
+
+            Row(
+                modifier = Modifier
+                    .background(textColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                listOf(CurrencyType.USD, CurrencyType.EUR).forEach { currency ->
+                    val isSelected = currency == selectedCurrency
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (isSelected) textColor.copy(alpha = 0.25f) else Color.Transparent,
+                                RoundedCornerShape(2.dp)
+                            )
+                            .align(Alignment.CenterVertically)
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .clickable { onCurrencyChange(currency) }
+                    ) {
+                        Text(
+                            text = currency.name,
+                            color = if (isSelected) textColor else textColor.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Normal: $priceNormal",
+                color = textColor,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Foil: $priceFoil",
+                color = textColor,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+
