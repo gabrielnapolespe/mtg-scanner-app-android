@@ -10,7 +10,8 @@ import okhttp3.OkHttpClient
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 /**
  * Repository component handling external network communications with the Scryfall API endpoint.
  * Configures secure transmission interceptors containing identity headers and manages remote card metadata queries.
@@ -27,8 +28,7 @@ class ScryfallRepository {
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 // Resolve authenticated user profile properties safely from the active Firebase session environment.
-                val currentUser = FirebaseAuth.getInstance().currentUser
-                val userEmail = currentUser?.email ?: "anonymous@magicscanapp.com"
+                val userEmail = "mtgscanner04@gmail.com"
 
                 // Structure standardized user-agent identifier signatures to conform to external API developer compliance guidelines.
                 val userAgentValue = "MagicScanApp/1.0 ($userEmail)"
@@ -122,36 +122,72 @@ class ScryfallRepository {
 
     /**
      * Retrieves all cards belonging to the same set expansion in the specified language.
+     * If the language is not English, it fetches data in parallel to merge English prices/text
+     * with the target language's images.
      *
      * @param setCode The unique 3 or 4 letter expansion/set identifier code (e.g., "neo").
-     * @param language The language code filter for the returned cards - Default = "en".
-     * @return A list of matching magic cards found, or an empty list if an error occurs.
+     * @param language The language code filter for the returned cards - Default = Sistema.
+     * @return A list of hybrid or standard magic cards found, or an empty list if an error occurs.
      */
-    suspend fun getCardsFromSetAndLanguage(setCode: String, language: String = "en"): List<MagicCard> {
-        // Delegate operation handling structures over to IO dispatcher threads to maintain application fluidity.
+    suspend fun getCardsFromSetAndLanguage(setCode: String, language: String = java.util.Locale.getDefault().language): List<MagicCard> {
         return withContext(Dispatchers.IO) {
             try {
-                // Initialize clean, explicit query criteria parameters grouping catalog properties together.
-                val query = "set:$setCode lang:$language"
-                val response = apiService.searchCard(query)
+                coroutineScope {
+                    if (language == "en") {
+                        return@coroutineScope fetchSingleSet(setCode, "en")
+                    }
 
-                // Trap network transmission execution faults early to return predictable empty fallback collection structures.
-                if (!response.isSuccessful || response.body() == null) {
-                    logError(response)
-                    return@withContext emptyList()
+                    val englishJob = async { fetchSingleSet(setCode, "en") }
+                    val localizedJob = async { fetchSingleSet(setCode, language) }
+
+                    val englishCards = englishJob.await()
+                    val localizedCards = localizedJob.await()
+
+                    if (localizedCards.isEmpty()) {
+                        return@coroutineScope englishCards
+                    }
+
+                    val localizedMap = localizedCards.associateBy { it.oracleId }
+
+                    englishCards.map { englishCard ->
+                        val localizedMatch = localizedMap[englishCard.oracleId]
+                        if (localizedMatch?.imageUris != null) {
+                            englishCard.copy(
+                                imageUris = localizedMatch.imageUris,
+                                printedName = localizedMatch.printedName ?: englishCard.printedName,
+                                printedTypeLine = localizedMatch.printedTypeLine ?: englishCard.printedTypeLine,
+                                printedText = localizedMatch.printedText ?: englishCard.printedText
+                            )
+                        } else {
+                            englishCard
+                        }
+                    }
                 }
-
-                val cardsResponse = response.body()!!
-
-                // Forward structural lists directly back down to consumer processing channels.
-                return@withContext cardsResponse.data
-
             } catch (e: Exception) {
                 e.printStackTrace()
                 emptyList()
             }
         }
     }
+
+    private suspend fun fetchSingleSet(setCode: String, language: String): List<MagicCard> {
+        return try {
+            val query = "set:$setCode lang:$language"
+            val response = apiService.searchCard(query)
+
+            if (!response.isSuccessful || response.body() == null) {
+                logError(response)
+                emptyList()
+            } else {
+                response.body()!!.data
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+
 
     /**
      * Records telemetry network error details inside the diagnostic logger.

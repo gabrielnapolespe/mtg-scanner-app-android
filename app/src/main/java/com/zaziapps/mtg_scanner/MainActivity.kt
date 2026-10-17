@@ -7,7 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.zaziapps.mtg_scanner.ui.screens.CameraView
 import com.zaziapps.mtg_scanner.ui.themes.MTGScannerTheme
-
 import androidx.activity.viewModels
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
@@ -32,14 +32,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import com.google.firebase.auth.FirebaseAuth
 import com.zaziapps.mtg_scanner.auth.AuthRepository
 import com.zaziapps.mtg_scanner.data.local.AppDatabase
 import com.zaziapps.mtg_scanner.data.local.scanned.ScannedCard
+import com.zaziapps.mtg_scanner.data.model.CustomCollection
 import com.zaziapps.mtg_scanner.data.repository.CardRepository
 import com.zaziapps.mtg_scanner.ui.viewmodel.ScryfallViewModel
 import com.zaziapps.mtg_scanner.ui.ScanScreen
 import com.zaziapps.mtg_scanner.ui.screens.CollectionScreen
+import com.zaziapps.mtg_scanner.ui.screens.CustomCollectionsListScreen
 import com.zaziapps.mtg_scanner.ui.screens.HistoryView
 import com.zaziapps.mtg_scanner.ui.screens.MainScreenContainer
 import com.zaziapps.mtg_scanner.ui.themes.DarkBrown
@@ -69,13 +70,17 @@ class MainActivity : ComponentActivity() {
     private val cardLangDao by lazy { database.cardLangDao() }
     private val authRepository by lazy { AuthRepository(applicationContext) }
 
-    val cardRepository by lazy { CardRepository(cardLangDao) }
-
+    val cardRepository by lazy {
+        CardRepository(
+            cardLangDao = cardLangDao,
+            customCollectionDao = database.customCollectionDao()
+        )
+    }
     private val scryfallViewModel: ScryfallViewModel by viewModels {
         ScryfallViewModelFactory(cardRepository)
     }
     private val themeViewModel: ThemeViewModel by viewModels {
-        ThemeViewModelFactory(scryfallViewModel)
+        ThemeViewModelFactory(scryfallViewModel, cardRepository)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,21 +99,8 @@ class MainActivity : ComponentActivity() {
                 val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
                 val coroutineScope = rememberCoroutineScope()
 
-                // Triggers an anonymous silent fallback login if no Firebase user session is currently active
-                LaunchedEffect(Unit) {
-                    if (FirebaseAuth.getInstance().currentUser == null) {
-                        val result = authRepository.loginWithGoogle(this@MainActivity)
-                        result.onSuccess { loggedIn ->
-                            if (loggedIn) {
-                                Toast.makeText(this@MainActivity, "OK: Temporary session started", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(this@MainActivity, "ERROR: Guest mode active", Toast.LENGTH_LONG).show()
-                            }
-                        }.onFailure {
-                            Toast.makeText(this@MainActivity, "Connection error. Guest mode active", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
+                var selectedCustomCollectionId by remember { mutableStateOf("") }
+                var selectedCustomCollectionName by remember { mutableStateOf("") }
 
                 ModalNavigationDrawer(
                     drawerState = drawerState,
@@ -155,6 +147,19 @@ class MainActivity : ComponentActivity() {
                                 colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
                                 modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                             )
+
+                            NavigationDrawerItem(
+                                icon = { Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = Gold) },
+                                label = { Text("My Collections", color = Color.White) },
+                                selected = activeScreen == ScanScreen.CUSTOM_COLLECTIONS_LIST || activeScreen == ScanScreen.CUSTOM_COLLECTION_DETAIL,
+                                onClick = {
+                                    coroutineScope.launch { drawerState.close() }
+                                    themeViewModel.navigateToCustomCollectionsList()
+                                },
+                                colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
+                                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                            )
+
                         }
                     }
                 ) {
@@ -170,8 +175,19 @@ class MainActivity : ComponentActivity() {
                                     onMenuClick = { coroutineScope.launch { drawerState.open() } }, // Handles menu open event
                                     onScannedCardClick = { cardName ->
                                         lifecycleScope.launch {
-                                            // Extracts details to populate state and view the clicked card's data sheet
-                                            val magicCard = scryfallViewModel.searchCardByName(cardName, "es")
+                                            val magicCard = scryfallViewModel.searchCardByName(cardName)
+
+                                            if (magicCard != null) {
+                                                launch(Dispatchers.IO) {
+                                                    val scannedCard = ScannedCard(
+                                                        scryfallId = magicCard.id ?: "",
+                                                        name = magicCard.name ?: cardName,
+                                                        urlImage = magicCard.imageUris?.normal ?: "",
+                                                        magicCard = magicCard
+                                                    )
+                                                    scannedCardDao.insertCardIntoHistory(scannedCard)
+                                                }
+                                            }
                                             themeViewModel.showCardDetail(magicCard)
                                         }
                                     }
@@ -185,6 +201,8 @@ class MainActivity : ComponentActivity() {
                                 } else {
                                     emptyList()
                                 }
+
+                                val userCustomCollections by themeViewModel.customCollections.collectAsState()
 
                                 MainScreenContainer(
                                     card = activeCard,
@@ -206,7 +224,7 @@ class MainActivity : ComponentActivity() {
                                             activeCard?.name?.let { cardName ->
                                                 // Trigger background collection pre-fetching operations smoothly
                                                 if (collectionList.isNotEmpty()) {
-                                                    themeViewModel.loadCollection(setCode = currentSetCode, lang = requestedLang)
+                                                    themeViewModel.loadCollection(setCode = currentSetCode)
                                                 }
 
                                                 // Always fetch individual translations alongside the background operations
@@ -220,24 +238,63 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                         }
+                                    },
+                                    customCollections = userCustomCollections,
+                                    onAddCardToCollection = { collectionId ->
+                                        activeCard?.let { card ->
+                                            themeViewModel.addCardToCollection(collectionId, card)
+                                            Toast.makeText(this@MainActivity, "Carta añadida a la colección", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 )
                             }
                             ScanScreen.COLLECTION_VIEW -> {
                                 CollectionScreen(
-                                    setCode = targetSetCode,
+                                    title = "Set: $targetSetCode",
+                                    collectionId = targetSetCode,
+                                    isCustomCollection = false,
                                     lang = activeCard?.lang ?: "en",
                                     viewModel = themeViewModel,
                                     onBackClick = {
                                         themeViewModel.showCardDetail(activeCard)
                                     },
                                     onCardClick = { clickedCard ->
-                                        // Extracts details to populate state and view the clicked card's data sheet
                                         themeViewModel.showCardDetail(clickedCard)
                                     }
                                 )
                             }
+                            ScanScreen.CUSTOM_COLLECTIONS_LIST -> {
+                                val customCollectionsList by themeViewModel.customCollections.collectAsState()
 
+                                CustomCollectionsListScreen(
+                                    customCollections = customCollectionsList,
+                                    onMenuClick = { coroutineScope.launch { drawerState.open() } },
+                                    onCollectionClick = { collection ->
+                                        selectedCustomCollectionId = collection.id
+                                        selectedCustomCollectionName = collection.name
+                                        themeViewModel.navigateToCustomCollectionDetail()
+                                    },
+                                    onAddCollectionConfirm = { name, description ->
+                                        themeViewModel.createCollection(name, description)
+                                    }
+                                )
+                            }
+
+                            ScanScreen.CUSTOM_COLLECTION_DETAIL -> {
+                                LaunchedEffect(selectedCustomCollectionId) {
+                                    themeViewModel.loadCustomCollection(selectedCustomCollectionId)
+                                }
+
+                                CollectionScreen(
+                                    title = selectedCustomCollectionName,
+                                    collectionId = selectedCustomCollectionId,
+                                    isCustomCollection = true, // Al ser true, CollectionScreen respetará los datos locales de Room
+                                    lang = "en",
+                                    viewModel = themeViewModel,
+                                    onBackClick = { themeViewModel.navigateToCustomCollectionsList() },
+                                    onCardClick = { clickedCard -> themeViewModel.showCardDetail(clickedCard) }
+                                )
+                            }
                             ScanScreen.CARD_HISTORY -> {
                                 HistoryView(
                                     scannedCardDao = scannedCardDao,

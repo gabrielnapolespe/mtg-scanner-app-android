@@ -1,5 +1,6 @@
 package com.zaziapps.mtg_scanner.data.repository
 
+import com.zaziapps.mtg_scanner.data.local.collections.CustomCollectionDao
 import com.zaziapps.mtg_scanner.data.local.lang.CardLangDao
 import com.zaziapps.mtg_scanner.data.local.lang.CardTranslations
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +12,7 @@ import kotlinx.coroutines.withContext
  *
  * @property cardLangDao The data access object handling structural queries on the card translations database table.
  */
-class CardRepository(private val cardLangDao: CardLangDao) {
+class CardRepository(private val cardLangDao: CardLangDao, private val customCollectionDao: CustomCollectionDao) {
 
     /**
      * Executes an asynchronous partial search across database records using cleansed string sequences.
@@ -41,5 +42,27 @@ class CardRepository(private val cardLangDao: CardLangDao) {
         return withContext(Dispatchers.IO) {
             cardLangDao.getCardByOracleId(oracleId)
         }
+    }
+
+
+    fun getAllCustomCollections() = customCollectionDao.getAllCollectionsFlow()
+
+    fun getCardCountForCollection(collectionId: String) = customCollectionDao.getCardCountForCollectionFlow(collectionId)
+
+    suspend fun createNewCollection(id: String, name: String, description: String) {
+        customCollectionDao.insertCollection(com.zaziapps.mtg_scanner.data.local.collections.CustomCollectionEntity(id, name, description))
+    }
+
+    suspend fun addCardToCustomCollection(collectionId: String, card: com.zaziapps.mtg_scanner.data.model.MagicCard) {
+        val crossRef = com.zaziapps.mtg_scanner.data.local.collections.CardCollectionCrossRef(
+            collectionId = collectionId,
+            cardId = card.id,
+            magicCard = card
+        )
+        customCollectionDao.addCardToCollection(crossRef)
+    }
+
+    suspend fun getCardsFromCustomCollection(collectionId: String): List<com.zaziapps.mtg_scanner.data.model.MagicCard> {
+        return customCollectionDao.getCardsForCollection(collectionId)
     }
 }

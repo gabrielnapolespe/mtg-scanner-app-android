@@ -90,7 +90,7 @@ class ScryfallViewModel(
      * @param lang The language code filter for the returned cards.
      * @return A collection of matching [MagicCard] structures returned from the remote source.
      */
-    suspend fun searchCollection(setCode: String, lang: String = "en"): List<MagicCard> {
+    suspend fun searchCollection(setCode: String, lang: String = java.util.Locale.getDefault().language): List<MagicCard> {
         return withContext(Dispatchers.IO) {
             try {
                 scryfallRepository.getCardsFromSetAndLanguage(setCode, lang)
@@ -109,20 +109,50 @@ class ScryfallViewModel(
      * @param langOutput Targeted localization code format for the final card instance.
      * @return A complete [MagicCard] metadata structure model profile instance, or null if an error occurs.
      */
-    suspend fun searchCardByName(name: String, langInput: String = "en", langOutput: String = "en"): MagicCard? {
+    suspend fun searchCardByName(name: String, langInput: String = java.util.Locale.getDefault().language, langOutput: String = java.util.Locale.getDefault().language): MagicCard? {
         if (name.isBlank()) return null
 
         return withContext(Dispatchers.IO) {
+
             _isSearchingCard.value = true
             try {
-                val originalCard = scryfallRepository.searchByNameAndLanguage(name, langInput)
 
-                if (langInput == langOutput) {
-                    return@withContext originalCard
+                val originalCard = if (langInput == "en") {
+                    scryfallRepository.searchByNameAndLanguage(name, "en")
+                } else {
+                    scryfallRepository.searchByNameAndLanguage(name, langInput)
                 }
 
-                // Fetch the cross-referenced localized card profile via the persistent oracle tracking key.
-                scryfallRepository.searchByOracleIdAndLanguage(originalCard?.oracleId, langOutput)
+                if (originalCard == null) return@withContext null
+
+                val englishCard = if (langInput != "en") {
+                    scryfallRepository.searchByOracleIdAndLanguage(originalCard.oracleId, "en")
+                } else {
+                    originalCard
+                }
+
+                if (englishCard == null) return@withContext null
+
+                if (langOutput == "en") {
+
+                    return@withContext englishCard
+                }
+
+                val localizedCard = scryfallRepository.searchByOracleIdAndLanguage(englishCard.oracleId, langOutput)
+
+                if (localizedCard != null && localizedCard.imageUris != null) {
+
+                    return@withContext englishCard.copy(
+                        imageUris = localizedCard.imageUris,
+                        lang = localizedCard.lang
+                    )
+                }
+
+                return@withContext englishCard
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
             } finally {
                 _isSearchingCard.value = false
             }

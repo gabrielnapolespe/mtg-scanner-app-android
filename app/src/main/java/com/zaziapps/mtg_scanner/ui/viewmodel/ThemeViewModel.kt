@@ -3,12 +3,21 @@ package com.zaziapps.mtg_scanner.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.zaziapps.mtg_scanner.data.model.CustomCollection
 import com.zaziapps.mtg_scanner.data.model.MagicCard
+import com.zaziapps.mtg_scanner.data.repository.CardRepository
 import com.zaziapps.mtg_scanner.ui.ScanScreen
 import com.zaziapps.mtg_scanner.ui.themes.CardDetailBackground
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -18,7 +27,8 @@ import kotlinx.coroutines.launch
  * @property scryfallViewModel Core business layer view-model utilized to parse card color identities.
  */
 class ThemeViewModel(
-    private val scryfallViewModel: ScryfallViewModel
+    private val scryfallViewModel: ScryfallViewModel,
+    private val cardRepository: CardRepository
 ) : ViewModel() {
 
     private val _currentManaList = MutableStateFlow<List<CardDetailBackground>>(listOf(CardDetailBackground.UNCOLORED))
@@ -32,6 +42,50 @@ class ThemeViewModel(
 
     private val _collectionUiState = MutableStateFlow<CollectionUiState>(CollectionUiState.Loading)
     val collectionUiState: StateFlow<CollectionUiState> = _collectionUiState
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val customCollections: StateFlow<List<CustomCollection>> = cardRepository.getAllCustomCollections()
+        .flatMapLatest { entities ->
+            val countFlows = entities.map { entity ->
+                cardRepository.getCardCountForCollection(entity.id).map { count ->
+                    CustomCollection(
+                        id = entity.id,
+                        name = entity.name,
+                        description = entity.description,
+                        cardCount = count
+                    )
+                }
+            }
+
+            if (countFlows.isEmpty()) {
+                kotlinx.coroutines.flow.flowOf(emptyList())
+            } else {
+                combine(countFlows) { it.toList() }
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun createCollection(name: String, description: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val newId = java.util.UUID.randomUUID().toString()
+            cardRepository.createNewCollection(newId, name, description)
+        }
+    }
+
+    fun loadCustomCollection(collectionId: String) {
+        viewModelScope.launch {
+            _collectionUiState.value = CollectionUiState.Loading
+            try {
+                val cards = cardRepository.getCardsFromCustomCollection(collectionId)
+                _collectionUiState.value = CollectionUiState.Success(cards)
+            } catch (e: Exception) {
+                _collectionUiState.value = CollectionUiState.Error(e.localizedMessage ?: "Error al cargar la colección local.")
+            }
+        }
+    }
 
     /**
      * Extracts card color combinations to update the background theme and navigates directly into the details interface.
@@ -49,9 +103,9 @@ class ThemeViewModel(
      * Loads all card components belonging to a designated set expansion using the targeted language parameter.
      *
      * @param setCode The unique 3 or 4 letter expansion/set identifier short code.
-     * @param lang The localization language code filter used to restrict matching result data.
+     * @param lang The localization language code filter used to restrict matching result data. java.util.Locale.getDefault().language
      */
-    fun loadCollection(setCode: String, lang: String = "en") {
+    fun loadCollection(setCode: String, lang: String = java.util.Locale.getDefault().language) {
         viewModelScope.launch {
             // Emplace a loading status token onto the interface state channel to inform progress indicators.
             _collectionUiState.value = CollectionUiState.Loading
@@ -67,6 +121,20 @@ class ThemeViewModel(
             } catch (e: Exception) {
                 _collectionUiState.value = CollectionUiState.Error(e.localizedMessage ?: "An error occurred while attempting to load the collection stream.")
             }
+        }
+    }
+
+    fun navigateToCustomCollectionsList() {
+        _currentScreen.value = ScanScreen.CUSTOM_COLLECTIONS_LIST
+    }
+
+    fun navigateToCustomCollectionDetail() {
+        _currentScreen.value = ScanScreen.CUSTOM_COLLECTION_DETAIL
+    }
+
+    fun addCardToCollection(collectionId: String, card: MagicCard) {
+        viewModelScope.launch(Dispatchers.IO) {
+            cardRepository.addCardToCustomCollection(collectionId, card)
         }
     }
 
@@ -99,12 +167,13 @@ class ThemeViewModel(
  * Manages cross-viewmodel property tracking boundaries inside the operational environment layer.
  */
 class ThemeViewModelFactory(
-    private val scryfallViewModel: ScryfallViewModel
+    private val scryfallViewModel: ScryfallViewModel,
+    private val cardRepository: CardRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ThemeViewModel::class.java)) {
-            return ThemeViewModel(scryfallViewModel) as T
+            return ThemeViewModel(scryfallViewModel, cardRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class assignment configuration requested")
     }

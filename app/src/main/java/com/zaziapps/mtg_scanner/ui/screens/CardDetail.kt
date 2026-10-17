@@ -46,12 +46,16 @@ import com.zaziapps.mtg_scanner.data.model.rememberAvailableLanguages
 import com.zaziapps.mtg_scanner.ui.components.LanguageSelector
 import com.zaziapps.mtg_scanner.ui.themes.CardDetailBackground
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import com.zaziapps.mtg_scanner.ui.components.LoadingDialog
 import androidx.compose.ui.graphics.Brush
 import com.zaziapps.mtg_scanner.data.model.CurrencyType
+import com.zaziapps.mtg_scanner.data.model.CustomCollection
 import com.zaziapps.mtg_scanner.data.model.MarketPrices
 
 
@@ -162,7 +166,9 @@ fun MainScreenContainer(
     onCardSelected: (MagicCard) -> Unit,
     onViewCollectionClick: (String) -> Unit,
     onBackButtonClick: () -> Unit,
-    onLanguageChanged: (String, String) -> Unit
+    onLanguageChanged: (String, String) -> Unit,
+    customCollections: List<CustomCollection> = emptyList(),
+    onAddCardToCollection: (collectionId: String) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -177,13 +183,8 @@ fun MainScreenContainer(
             onLanguageChanged(selectedLangCode, card.set ?: "")
         }
     }
+    var showCollectionMenu by remember { mutableStateOf(false) }
 
-
-    // Look for the complete object that matches the selected code
-    val currentLanguageItem = availableLanguages.find { it.code == selectedLangCode }
-        ?: LanguageItem(selectedLangCode, selectedLangCode.uppercase())
-
-    // Calculate boundary indices if collection context data is populated
 
     // Find the exact card in the collection list (checks ID first, then Oracle ID for translations)
     val currentCardIndex = remember(card?.id, collectionCards) {
@@ -267,19 +268,42 @@ fun MainScreenContainer(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 12.dp)
                 )
+
+                Box {
+                    IconButton(onClick = { showCollectionMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Default.BookmarkAdd,
+                            contentDescription = "Añadir a colección",
+                            tint = selectedManaList.first().textColor,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showCollectionMenu,
+                        onDismissRequest = { showCollectionMenu = false }
+                    ) {
+                        if (customCollections.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("No tienes colecciones creadas") },
+                                onClick = { showCollectionMenu = false },
+                                enabled = false
+                            )
+                        } else {
+                            customCollections.forEach { collection ->
+                                DropdownMenuItem(
+                                    text = { Text("Añadir a: ${collection.name}") },
+                                    onClick = {
+                                        onAddCardToCollection(collection.id)
+                                        showCollectionMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
-            // Integrated custom LanguageSelector component
-            LanguageSelector(
-                selectedLanguage = currentLanguageItem,
-                languages = availableLanguages,
-                onLanguageSelected = { newLang ->
-                    selectedLangCode = newLang.code // State change automatically satisfies and fires the LaunchedEffect block above
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            )
 
             // Container Layer with built-in HorizontalPager and overlayed navigation arrows
             Box(

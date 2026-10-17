@@ -20,7 +20,8 @@ import org.tensorflow.lite.support.image.ops.ResizeOp
  * to perform edge-based object inference.
  *
  * @property context The application context used to load the model asset.
- * @property onCardsDetected Callback executed when cards are detected and processed within the video stream.
+ * @property cardTracker The card tracker object.
+ * @property onCardsUpdated Callback executed when cards are detected and processed within the video stream.
  */
 class CardAnalyzer(
     private val context: Context,
@@ -125,7 +126,6 @@ class CardAnalyzer(
             // Iterate over each detected object up to the maximum constrained object count limit
             for (i in 0 until objectCount) {
                 val confidence = outputScores[0][i]
-//                if (confidence > CONFIDENCE_THRESHOLD) {
                 val box = outputLocations[0][i]
 
                 // Construct a RectF bounding box mapped from the structured output coordinates array
@@ -139,7 +139,6 @@ class CardAnalyzer(
                 tempClasses.add(
                     outputClasses[0][i].toInt()
                 )
-                // }
             }
 
             // Submit the structural predictions into the tracker instance to handle multi-frame continuity

@@ -257,7 +257,15 @@ fun CameraView(
                                                                     cardTracker.updateRecognition(card.id, translation, RecognitionState.RESOLVED)
 
                                                                     mainHandler.post {
-                                                                        val cardName = translation.nameEn ?: "Unknown Card"
+                                                                        val currentLang = java.util.Locale.getDefault().language.replaceFirstChar { it.uppercase() } // Convierte "es" en "Es"
+                                                                        val propertyName = "name$currentLang"
+
+                                                                        val cardName = try {
+                                                                            val property = translation::class.members.find { it.name == propertyName }
+                                                                            (property?.call(translation) as? String) ?: translation.nameEn
+                                                                        } catch (e: Exception) {
+                                                                            translation.nameEn
+                                                                        } ?: "Unknown Card"
 
                                                                         val newItem = ScannedCardItem(
                                                                             id = card.id,
