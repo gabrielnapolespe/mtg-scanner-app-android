@@ -1,7 +1,6 @@
 package com.zaziapps.mtg_scanner.ui.components
 
 import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.util.Size
 import androidx.annotation.OptIn
@@ -20,7 +19,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,14 +27,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.concurrent.futures.await
-import com.zaziapps.mtg_scanner.data.model.CardDetection
-import com.zaziapps.mtg_scanner.analyzer.TextAnalyzer
 import com.zaziapps.mtg_scanner.analyzer.CardAnalyzer
-import com.zaziapps.mtg_scanner.analyzer.CardTracker
-import com.zaziapps.mtg_scanner.data.local.lang.CardTranslations
+import com.zaziapps.mtg_scanner.tracker.CardTracker
 import com.zaziapps.mtg_scanner.data.model.TrackedCard
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 /**
  * Interface element providing a realtime viewfinder preview stream backed by the CameraX hardware pipeline.

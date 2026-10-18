@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.zaziapps.mtg_scanner.ui.viewmodel.ScryfallViewModel
-import com.zaziapps.mtg_scanner.data.model.MagicCard
 import com.zaziapps.mtg_scanner.ui.components.CameraPreview
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
@@ -46,10 +45,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
-import com.zaziapps.mtg_scanner.analyzer.CardTracker
-import com.zaziapps.mtg_scanner.data.model.CardDetection
+import com.zaziapps.mtg_scanner.tracker.CardTracker
 import com.zaziapps.mtg_scanner.analyzer.TextAnalyzer
-import com.zaziapps.mtg_scanner.data.local.lang.CardTranslations
 import com.zaziapps.mtg_scanner.data.model.TrackedCard
 import com.zaziapps.mtg_scanner.data.states.RecognitionState
 import com.zaziapps.mtg_scanner.ui.components.LoadingDialog

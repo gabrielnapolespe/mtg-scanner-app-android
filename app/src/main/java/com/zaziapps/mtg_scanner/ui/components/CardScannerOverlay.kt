@@ -28,7 +28,6 @@ import com.zaziapps.mtg_scanner.ui.themes.Gold
  * Computes spatial coordinate transformations to scale normalized camera boundaries onto the active display canvas.
  *
  * @param boundingBoxes The collection of incoming [TrackedCard] targets identified in the current video frame.
- * @param onItemClick Callback executed when a user taps within the geometric boundaries of a tracked card frame.
  * @param modifier Structural styling or layout modifiers delegated down to the drawing canvas layer.
  */
 @Composable
@@ -137,7 +136,7 @@ fun CardScannerOverlay(
                             style = Stroke(width = 6f)
                         )
                     }
-                    // Hybrid multi-color identity (3 or more elements) -> Render high-tier premium Gold styling frame
+                    // Hybrid multicolor identity (3 or more elements) -> Render high-tier premium Gold styling frame
                     else -> {
                         drawRoundRect(
                             color = Gold,

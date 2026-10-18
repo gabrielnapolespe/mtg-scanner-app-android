@@ -56,7 +56,7 @@ fun GridCardItem(
                 ImageRequest.Builder(context)
                     .data(imageUrl)
                     .crossfade(true)
-                    .setHeader("User-Agent", "MTGScannerApp/1.0 (com.example.mtg_scanner)")
+                    .setHeader("User-Agent", "MTGScannerApp/1.0 (com.zaziapps.mtg_scanner)")
                     .setHeader("Accept", "image/webp,image/png,image/*;q=0.8")
                     .build()
             }
